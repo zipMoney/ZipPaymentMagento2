@@ -39,6 +39,8 @@ class HealthCheck
         'ae' => 'United Arab Emirate',
         'mx' => 'Mexico',
         'sa' => 'Saudi Arabia',
+        'cz' => 'Czech Republic',
+        'pl' => 'Poland',
     ];
 
     /**

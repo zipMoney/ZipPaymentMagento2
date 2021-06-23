@@ -65,6 +65,8 @@ class Charge extends AbstractCheckout
      */
     protected $_dataObjectHelper;
 
+    protected $_refundApi = null;
+
     /**
      * Set quote and config instances
      *
@@ -90,6 +92,7 @@ class Charge extends AbstractCheckout
         \Zip\ZipPayment\Helper\Data $helper,
         \Zip\ZipPayment\Model\Config $config,
         \Zip\ZipPayment\MerchantApi\Lib\Api\ChargesApi $chargesApi,
+        \Zip\ZipPayment\MerchantApi\Lib\Api\RefundsApi $refundsApi,
         array $data = []
     ) {
         $this->_quoteManagement = $cartManagement;
@@ -103,6 +106,7 @@ class Charge extends AbstractCheckout
         $this->_objectCopyService = $objectCopyService;
         $this->_dataObjectHelper = $dataObjectHelper;
         $this->_api = $chargesApi;
+        $this->_refundApi = $refundsApi;
 
         parent::__construct(
             $customerSession,
@@ -163,6 +167,30 @@ class Charge extends AbstractCheckout
                 $payment = $this->_order->getPayment()
                     ->setAdditionalInformation($additionalPaymentInfo);
                 $this->_orderPaymentRepository->save($payment);
+            }
+
+            // checking charge amount is same as order grand total
+            if ($charge->getAmount() != $this->_order->getGrandTotal()) {
+                $messageWithAmount = $this->_helper->__("Charge Amount is not same as Order amount. Charge amount:- %s and order amount :-%s", $charge->getAmount(),$this->_order->getGrandTotal());
+                $this->_logger->debug($messageWithAmount);
+                $this->_helper->cancelOrder($this->_order, $messageWithAmount);
+                $apiConfig = new \Zip\ZipPayment\MerchantApi\Lib\Configuration();
+                $apiConfig->setApiKey('Authorization', $this->_config->getMerchantPrivateKey())
+                    ->setApiKeyPrefix('Authorization', 'Bearer')
+                    ->setEnvironment($this->_config->getEnvironment())
+                    ->setPlatform("Magento/" . $this->_helper->getMagentoVersion()
+                        . "Zip_ZipPayment/"
+                        . $this->_helper->getExtensionVersion());
+                $payload = $this->_payloadHelper->getRefundPayload(
+                    $this->_order,
+                    $charge->getAmount(),
+                    $messageWithAmount
+                );
+                // doing refund if the amount is captured by the charge api
+                $this->_refundApi->setApiClient(new \Zip\ZipPayment\MerchantApi\Lib\ApiClient($apiConfig));
+                $refund = $this->_refundApi->refundsCreate($payload, $this->_helper->generateIdempotencyKey());
+                $this->_logger->debug("Refund Response:- " . $this->_helper->jsonEncode($refund));
+                throw new \Magento\Framework\Exception\LocalizedException(__('Could not process the payment.'));
             }
 
             $this->_chargeResponse($charge, $this->_config->isCharge());
