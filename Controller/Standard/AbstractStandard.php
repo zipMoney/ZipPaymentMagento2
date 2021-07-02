@@ -292,6 +292,11 @@ abstract class AbstractStandard extends Action
                 ->create()
                 ->addFieldToFilter("entity_id", $quoteId)
                 ->getFirstItem();
+            // update checkout id by latest checckout id in payment additional data.
+            $additionalPaymentInfo = $this->_quote->getPayment()->getAdditionalInformation();
+            $additionalPaymentInfo['zip_checkout_id'] = $zip_checkout_id;
+            $this->_quote->getPayment()->setAdditionalInformation($additionalPaymentInfo);
+            $this->_quoteRepository->save($this->_quote);
             return $this->_quote;
         } catch (\Magento\Framework\Exception\LocalizedException $e) {
             $this->_logger->error($e->getMessage());
